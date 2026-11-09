@@ -1,0 +1,30 @@
+#:schema ../../node_modules/wrangler/config-schema.json
+name = "kk-receipts-staging"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[observability]
+enabled = true
+
+[vars]
+STAGE = "staging"
+DEFAULT_CURRENCY = "KES"
+
+[[r2_buckets]]
+binding = "RECEIPTS_BUCKET"
+bucket_name = "kijani-receipts-staging"
+
+[[r2_buckets]]
+binding = "PROCESSED_BUCKET"
+bucket_name = "kijani-processed-staging"
+
+[[queues.producers]]
+binding = "PROCESSED_QUEUE"
+queue = "kijani-processed-events-staging"
+
+[[queues.consumers]]
+queue = "kijani-receipts-events-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "kijani-dead-letters-staging"
