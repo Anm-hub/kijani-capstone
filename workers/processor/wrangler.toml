@@ -1,0 +1,25 @@
+#:schema ../../node_modules/wrangler/config-schema.json
+name = "kk-processor-staging"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[observability]
+enabled = true
+
+[vars]
+STAGE = "staging"
+
+[[r2_buckets]]
+binding = "PROCESSED_BUCKET"
+bucket_name = "kijani-processed-staging"
+
+[[queues.producers]]
+binding = "NOTIFY_QUEUE"
+queue = "kijani-notify-events-staging"
+
+[[queues.consumers]]
+queue = "kijani-processed-events-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "kijani-dead-letters-staging"
