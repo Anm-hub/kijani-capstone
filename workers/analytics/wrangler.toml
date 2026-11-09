@@ -1,0 +1,24 @@
+#:schema ../../node_modules/wrangler/config-schema.json
+name = "kk-analytics-staging"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+[observability]
+enabled = true
+
+[vars]
+STAGE = "staging"
+
+# Expose HTTP surfaces interactively on workers.dev subdomain for verification
+workers_dev = true
+
+[[r2_buckets]]
+binding = "DELIVERED_BUCKET"
+bucket_name = "kijani-delivered-staging"
+
+[[queues.consumers]]
+queue = "kijani-delivered-events-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "kijani-dead-letters-staging"
