@@ -22,16 +22,15 @@ cat > "/tmp/${POISON_FILE}" << EOF
 EOF
 
 echo "Bypassing public gateway API and injecting poison payload directly into R2 bucket..."
-npx wrangler r2 object put "kijani-receipts-${STAGE}/${POISON_FILE}" --file="/tmp/${POISON_FILE}"
+npx wrangler r2 object put "kijani-receipts-${STAGE}/${POISON_FILE}" --file="/tmp/${POISON_FILE}" --remote
 
-# Polling checking loop for structural quarantine placement
 MAX_ATTEMPTS=9
 ATTEMPT=1
 SUCCESS=0
 
 while [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ]; do
   echo "Checking for quarantine artifact (Attempt ${ATTEMPT}/${MAX_ATTEMPTS})..."
-  if npx wrangler r2 object get "kijani-processed-${STAGE}/quarantine-${POISON_FILE}" --file=/tmp/q.json 2>/dev/null; then
+  if npx wrangler r2 object get "kijani-processed-${STAGE}/quarantine-receipt-${POISON_ORDER}.json" --file=/tmp/q.json --remote 2>/dev/null; then
     echo " -> Fault Isolated! System successfully detected bad business rules and moved file to quarantine."
     SUCCESS=1
     break

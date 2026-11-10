@@ -26,7 +26,7 @@ echo "Sending mock order transaction [ID: ${UNIQUE_ORDER}]..."
 INGEST_RES=$(curl -s -w "\n%{http_code}" -X POST "${KK_RECEIPTS_URL}/receipts" \
   -H "Content-Type: application/json" \
   -H "x-api-key: ${API_KEY}" \
-  -d "{\"orderId\":\"${UNIQUE_ORDER}\",\"amount\":4500.50,\"currency\":\"KES\"}")
+  -d "{\"orderId\":\"${UNIQUE_ORDER}\",\"amount\":4500.50,\"currency\":\"KES\"}" || echo -e "\n000")
 
 HTTP_STATUS=$(echo "${INGEST_RES}" | tail -n 1)
 if [ "${HTTP_STATUS}" -ne 202 ]; then
@@ -34,6 +34,7 @@ if [ "${HTTP_STATUS}" -ne 202 ]; then
   exit 1
 fi
 echo "Transaction acknowledged cleanly."
+
 
 # 2. Polling loop targeting explicit delivery endpoint
 MAX_ATTEMPTS=12

@@ -8,7 +8,9 @@ echo "==== Starting Cloudflare Resource Provisioning for Stage: ${STAGE} ===="
 create_bucket_idempotent() {
   local name=$1
   echo "Checking R2 bucket: ${name}..."
-  if npx wrangler r2 bucket list 2>/dev/null | grep -q "${name}"; then
+  local bucket_list
+  bucket_list=$(npx wrangler r2 bucket list 2>/dev/null || echo "")
+  if echo "${bucket_list}" | grep -q "${name}"; then
     echo " -> Bucket '${name}' already exists."
   else
     echo " -> Creating R2 bucket '${name}'..."
@@ -19,7 +21,9 @@ create_bucket_idempotent() {
 create_queue_idempotent() {
   local name=$1
   echo "Checking Cloudflare Queue: ${name}..."
-  if npx wrangler queues list 2>/dev/null | grep -q "${name}"; then
+  local queue_list
+  queue_list=$(npx wrangler queues list 2>/dev/null || echo "")
+  if echo "${queue_list}" | grep -q "${name}"; then
     echo " -> Queue '${name}' already exists."
   else
     echo " -> Creating Queue '${name}'..."
@@ -33,8 +37,9 @@ link_bucket_to_queue() {
   local queue=$3
   echo "Evaluating notification rules for bucket: ${bucket}..."
   
-  # Check if rule exists to prevent crashing
-  if npx wrangler r2 bucket notification list "${bucket}" 2>/dev/null | grep -q "${queue}"; then
+  local notif_list
+  notif_list=$(npx wrangler r2 bucket notification list "${bucket}" 2>/dev/null || echo "")
+  if echo "${notif_list}" | grep -q "${queue}"; then
     echo " -> Link already exists between bucket '${bucket}' and queue '${queue}'."
   else
     echo " -> Creating notification binding rule..."
@@ -46,22 +51,17 @@ link_bucket_to_queue() {
   fi
 }
 
-# 1. Provision Dead Letter Queue
 create_queue_idempotent "kijani-dead-letters-${STAGE}"
-
-# 2. Provision Storage Buckets
 create_bucket_idempotent "kijani-receipts-${STAGE}"
 create_bucket_idempotent "kijani-processed-${STAGE}"
 create_bucket_idempotent "kijani-notify-${STAGE}"
 create_bucket_idempotent "kijani-delivered-${STAGE}"
 
-# 3. Provision Event Queues
 create_queue_idempotent "kijani-receipts-events-${STAGE}"
 create_queue_idempotent "kijani-processed-events-${STAGE}"
 create_queue_idempotent "kijani-notify-events-${STAGE}"
 create_queue_idempotent "kijani-delivered-events-${STAGE}"
 
-# 4. Bind Notification Rules to Storage Primitives
 link_bucket_to_queue "kijani-receipts-${STAGE}" "receipt-" "kijani-receipts-events-${STAGE}"
 link_bucket_to_queue "kijani-processed-${STAGE}" "processed-" "kijani-processed-events-${STAGE}"
 link_bucket_to_queue "kijani-notify-${STAGE}" "notify-" "kijani-notify-events-${STAGE}"

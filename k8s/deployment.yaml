@@ -4,7 +4,7 @@ metadata:
   name: kk-payments
   namespace: kijani
   annotations:
-    kubernetes.io/change-cause: "Initial deployment of kk-payments v1.0.0 utilizing decoupled cloudflare r2 integrations"
+    kubernetes.io/change-cause: "Initial deployment of kk-payments v1.0.0 listening on port 3001 mapped to R2 boundaries"
 spec:
   replicas: 2
   strategy:
@@ -22,10 +22,10 @@ spec:
     spec:
       containers:
         - name: kk-payments-service
-          image: ghcr.io/anm-hub/kk-payments:v1.0.0
+          image: ghcr.io/anm-hub/kk-payments:1.0.0-7f39a2b # Pinned to your exact image release tag
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8080
+            - containerPort: 3001
           resources:
             limits:
               cpu: "500m"
@@ -41,12 +41,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 3001
             initialDelaySeconds: 15
             periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 3001
             initialDelaySeconds: 5
             periodSeconds: 10
+

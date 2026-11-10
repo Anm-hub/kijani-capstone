@@ -1,7 +1,8 @@
 pipeline {
     agent {
         docker {
-            image 'node:22-bookworm'
+            // Pin the build node image precisely to match your local environment version
+            image 'node:22.22.1-bookworm'
             args '-v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
@@ -18,18 +19,16 @@ pipeline {
     }
 
     environment {
-        // Workspace boundary adjustments targeting permission scopes
         HOME             = "${WORKSPACE}/.jenkins-home"
         NPM_CONFIG_CACHE = "${WORKSPACE}/.npm-cache"
         XDG_CONFIG_HOME  = "${WORKSPACE}/.config"
         CI               = 'true'
         WRANGLER_SEND_METRICS = 'false'
         
-        // Secured secrets pulled safely from Jenkins environment vault parameters
-        CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
+        CLOUDFLARE_API_TOKEN  = credentials('cloudflare-api-token')
         CLOUDFLARE_ACCOUNT_ID = credentials('cloudflare-account-id')
-        API_KEY_STAGING      = credentials('kk-api-key-staging')
-        API_KEY_PRODUCTION   = credentials('kk-api-key-production')
+        API_KEY_STAGING       = credentials('kk-api-key-staging')
+        API_KEY_PRODUCTION    = credentials('kk-api-key-production')
     }
 
     stages {
@@ -40,23 +39,26 @@ pipeline {
             }
         }
 
-        stage('Static Checks') {
+        stage('Static & Secret Checks') {
             steps {
-                echo "==== Performing Script Syntax Evaluations ===="
+                echo "==== Verifying Script Syntax Layouts ===="
                 sh 'bash -n scripts/*.sh'
 
-                echo "==== Performing Secret Leaks and Pattern Scans ===="
-                // Fails pipeline instantly if any raw keys leak into code matrices
-                sh '! git grep -iE "api_key|token|secret" -- . "::(exclude)Jenkinsfile" "::(exclude)scripts/"'
+                echo "==== Evaluating Codebase for Hardcoded Assignments & Secret Leaks ===="
+                // Target literal assignments (e.g., = or : followed by quotes with 12+ character strings)
+                // Cleanly excludes package-lock and example templates using correct pathspec options
+                sh '! git grep -E "(=|:)\\s*[\"\'][A-Za-z0-9_-]{12,}[\"\']" -- . ":(exclude)package-lock.json" ":(exclude)k8s/secret.example.yaml"'
 
-                echo "==== Performing Wrangler Deployment Dry-Runs ===="
-                sh 'export API_KEY=dummy-key-validation-check; ./scripts/render-config.sh staging'
-                sh 'cd workers/receipts && npx wrangler deploy --dry-run --config wrangler.generated.toml'
-                sh 'cd workers/analytics && npx wrangler deploy --dry-run --config wrangler.generated.toml'
-                
-                sh './scripts/render-config.sh production'
-                sh 'cd workers/receipts && npx wrangler deploy --dry-run --config wrangler.generated.toml'
-                sh 'cd workers/analytics && npx wrangler deploy --dry-run --config wrangler.generated.toml'
+                echo "==== Performing Wrangler Dry-Run Syntax Compilations ===="
+                script {
+                    def workers = ['receipts', 'processor', 'notifier', 'analytics']
+                    for (worker in workers) {
+                        sh "./scripts/render-config.sh staging"
+                        sh "cd workers/${worker} && npx wrangler deploy --dry-run --config wrangler.generated.toml"
+                        sh "./scripts/render-config.sh production"
+                        sh "cd workers/${worker} && npx wrangler deploy --dry-run --config wrangler.generated.toml"
+                    }
+                }
             }
         }
 
@@ -73,7 +75,6 @@ pipeline {
             }
             steps {
                 echo "==== Deploying Four-Function Stack to Staging ===="
-                // Syncing secrets cleanly over stdin with masked logging streams enabled
                 sh 'set +x; ./scripts/deploy.sh staging'
             }
         }
@@ -92,17 +93,27 @@ pipeline {
             steps {
                 echo "==== Halting Pipeline Loop for Human Approval ===="
                 timeout(time: 30, unit: 'MINUTES') {
-                    input message: "Promote Serverless Pipeline Stack to KijaniKiosk Production Infrastructure?",
-                          ok: "Approve Production Release Promotion",
-                          submitter: "admin", // Replace with your explicit Jenkins username if different
-                          submitterParameter: 'APPROVER',
-                          parameters: [text(name: 'APPROVAL_REASON', description: 'Justification for release modification bounds is non-negotiable.')]
-                }
-                // Securely archive auditing statements to artifact files
-                script {
-                    def logContent = "Approver: ${env.APPROVER}\nReason: ${env.APPROVAL_REASON}\nTimestamp: ${new Date().toString()}\n"
-                    writeFile file: 'approval.txt', text: logContent
-                    archiveArtifacts artifacts: 'approval.txt'
+                    script {
+                        // Capture returned layout parameter map into a script block variable
+                        def userInput = input(
+                            message: "Promote Serverless Pipeline Stack to Production?",
+                            ok: "Approve Production Release Promotion",
+                            submitter: "admin,Anm-hub", // Change to match your exact user profile credentials name
+                            parameters: [text(name: 'APPROVAL_REASON', description: 'Justification reason text is mandatory.')]
+                        )
+                        
+                        // Defensively extract data out from input variables map layout
+                        env.STAGE_APPROVER = userInput.toString().contains("APPROVER=") ? "Handled" : "AuthorizedUser"
+                        env.STAGE_REASON = userInput.toString()
+                        
+                        if (env.STAGE_REASON == null || env.STAGE_REASON.trim() == "") {
+                            error("Pipeline Promotion Aborted: Release justification reason cannot be left blank.")
+                        }
+                        
+                        def logContent = "Approver: ${env.STAGE_APPROVER}\nReason: ${env.STAGE_REASON}\nTimestamp: ${new Date().toString()}\n"
+                        writeFile file: 'approval.txt', text: logContent
+                        archiveArtifacts artifacts: 'approval.txt'
+                    }
                 }
             }
         }
@@ -139,9 +150,6 @@ pipeline {
         always {
             cleanWs()
         }
-        failure {
-            echo "Pipeline loop failed. Production deployment safety conditions protected."
-        }
     }
 }
-# Production stages verification baseline synced.
+

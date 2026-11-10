@@ -7,3 +7,4 @@ data:
   AWS_REGION: "auto"
   R2_ENDPOINT: "https://cloudflarestorage.com"
   R2_BUCKET: "kijani-receipts-staging"
+
