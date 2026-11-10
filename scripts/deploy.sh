@@ -17,11 +17,11 @@ echo "==== Starting Cloudflare Workers Deployment Phase [Stage: ${STAGE}] ===="
 
 declare -A DEPLOYED_URLS
 
-for worker in processor notifier receipts analytics; do
+for worker in receipts analytics processor notifier; do
   echo "Deploying worker module: kk-${worker}-${STAGE}..."
   cd "workers/${worker}"
   
-  local log_file="/tmp/wrangler-deploy-${worker}.log"
+  log_file="/tmp/wrangler-deploy-${worker}.log"
   npx wrangler deploy --config wrangler.generated.toml | tee "${log_file}"
   
   if [ "$worker" = "receipts" ] || [ "$worker" = "analytics" ]; then
@@ -29,7 +29,7 @@ for worker in processor notifier receipts analytics; do
     echo -n "${API_KEY}" | npx wrangler secret put API_KEY --config wrangler.generated.toml
     
     # Parse deployed production edge URL directly from log
-    local parsed_url
+    
     parsed_url=$(grep -oE "https://[^ ]+\.workers\.dev" "${log_file}" | head -n 1 || echo "")
     if [ -z "${parsed_url}" ]; then
       echo "Error: Failed to parse exposed route point path for kk-${worker}-${STAGE} from log." >&2
