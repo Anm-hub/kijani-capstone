@@ -1,28 +1,39 @@
 #!/usr/bin/env bash
-# deploy.sh - Iterates through each directory and provisions workers to the active stage.
+# deploy.sh - Iterates through each directory and provisions workers using generated targets.
 set -euo pipefail
 
 STAGE="${1:-staging}"
 ENV_FILE=".env.${STAGE}"
 
+if [ -z "${API_KEY:-}" ]; then
+  echo "Error: API_KEY environment parameter must be explicitly set before running deployments." >&2
+  exit 1
+fi
+
+echo "==== Compiling Configuration Formats ===="
+./scripts/render-config.sh "${STAGE}"
+
 echo "==== Starting Cloudflare Workers Deployment Phase [Stage: ${STAGE}] ===="
 
-# Deploy non-HTTP background consumers first
-for worker in processor notifier; do
-  echo "Deploying background worker: kk-${worker}..."
-  (cd "workers/${worker}" && npx wrangler deploy --env "${STAGE}")
+for worker in processor notifier receipts analytics; do
+  echo "Deploying worker module: kk-${worker}-${STAGE}..."
+  cd "workers/${worker}"
+  
+  # Tee configuration updates live to screen
+  npx wrangler deploy --config wrangler.generated.toml | tee /tmp/wrangler-deploy.log
+  
+  # Ingress Interface Secret Seeding via Stdin
+  if [ "$worker" = "receipts" ] || [ "$worker" = "analytics" ]; then
+    echo "Seeding API_KEY authentication rules..."
+    echo -n "${API_KEY}" | npx wrangler secret put API_KEY --config wrangler.generated.toml
+  fi
+  cd ../..
 done
 
-# Deploy HTTP edge interfaces and capture their live routing parameters
-echo "Deploying edge API worker: kk-receipts..."
-RECEIPTS_OUT=$(cd workers/receipts && npx wrangler deploy --env "${STAGE}")
-RECEIPTS_URL=$(echo "${RECEIPTS_OUT}" | grep -oE "https://[^ ]+\.workers\.dev" | head -n 1 || echo "PENDING_REGISTRATION")
+# Extract public routing addresses
+RECEIPTS_URL="https://kk-receipts-${STAGE}.anastaciamwangi12.workers.dev"
+ANALYTICS_URL="https://kk-analytics-${STAGE}.anastaciamwangi12.workers.dev"
 
-echo "Deploying analytics worker: kk-analytics..."
-ANALYTICS_OUT=$(cd workers/analytics && npx wrangler deploy --env "${STAGE}")
-ANALYTICS_URL=$(echo "${ANALYTICS_OUT}" | grep -oE "https://[^ ]+\.workers\.dev" | head -n 1 || echo "PENDING_REGISTRATION")
-
-# Save outputs locally to a gitignored state location for downstream pipelines
 cat > "${ENV_FILE}" << EOF
 # Cloudflare Exposed Domain Ingress Pointers [Stage: ${STAGE}]
 KK_RECEIPTS_URL="${RECEIPTS_URL}"
@@ -30,4 +41,4 @@ KK_ANALYTICS_URL="${ANALYTICS_URL}"
 EOF
 
 echo "==== Workers Deployment Phase Finalized successfully ===="
-echo "Exposed Ingress vectors mapped to: ${ENV_FILE}"
+

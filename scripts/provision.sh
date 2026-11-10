@@ -5,7 +5,6 @@ set -euo pipefail
 STAGE="${1:-staging}"
 echo "==== Starting Cloudflare Resource Provisioning for Stage: ${STAGE} ===="
 
-# 1. Helper function to create R2 buckets safely
 create_bucket_idempotent() {
   local name=$1
   echo "Checking R2 bucket: ${name}..."
@@ -17,7 +16,6 @@ create_bucket_idempotent() {
   fi
 }
 
-# 2. Helper function to create Queues safely
 create_queue_idempotent() {
   local name=$1
   echo "Checking Cloudflare Queue: ${name}..."
@@ -29,51 +27,45 @@ create_queue_idempotent() {
   fi
 }
 
-# 3. Create the Dead Letter Queue first
+link_bucket_to_queue() {
+  local bucket=$1
+  local prefix=$2
+  local queue=$3
+  echo "Evaluating notification rules for bucket: ${bucket}..."
+  
+  # Check if rule exists to prevent crashing
+  if npx wrangler r2 bucket notification list "${bucket}" 2>/dev/null | grep -q "${queue}"; then
+    echo " -> Link already exists between bucket '${bucket}' and queue '${queue}'."
+  else
+    echo " -> Creating notification binding rule..."
+    npx wrangler r2 bucket notification create "${bucket}" \
+      --event-type object-create \
+      --prefix "${prefix}" \
+      --suffix ".json" \
+      --queue "${queue}"
+  fi
+}
+
+# 1. Provision Dead Letter Queue
 create_queue_idempotent "kijani-dead-letters-${STAGE}"
 
-# 4. Provision required pipeline storage buckets
+# 2. Provision Storage Buckets
 create_bucket_idempotent "kijani-receipts-${STAGE}"
 create_bucket_idempotent "kijani-processed-${STAGE}"
 create_bucket_idempotent "kijani-notify-${STAGE}"
 create_bucket_idempotent "kijani-delivered-${STAGE}"
 
-# 5. Provision decoupled event-driven queues
+# 3. Provision Event Queues
 create_queue_idempotent "kijani-receipts-events-${STAGE}"
 create_queue_idempotent "kijani-processed-events-${STAGE}"
 create_queue_idempotent "kijani-notify-events-${STAGE}"
 create_queue_idempotent "kijani-delivered-events-${STAGE}"
 
-echo "==== Configuring R2 Bucket Event Notifications to Queues ===="
-# Note: These parameters establish event links between buckets and processing queues.
-# If these bindings already exist, Wrangler logs the conflict gracefully and stays idempotent.
-
-echo "Linking kijani-receipts-${STAGE} to queue..."
-npx wrangler r2 bucket notification create "kijani-receipts-${STAGE}" \
-  --event-type object-create \
-  --prefix "receipt-" \
-  --suffix ".json" \
-  --queue "kijani-receipts-events-${STAGE}" || echo " -> Mapping exists or handled."
-
-echo "Linking kijani-processed-${STAGE} to queue..."
-npx wrangler r2 bucket notification create "kijani-processed-${STAGE}" \
-  --event-type object-create \
-  --prefix "processed-" \
-  --suffix ".json" \
-  --queue "kijani-processed-events-${STAGE}" || echo " -> Mapping exists or handled."
-
-echo "Linking kijani-notify-${STAGE} to queue..."
-npx wrangler r2 bucket notification create "kijani-notify-${STAGE}" \
-  --event-type object-create \
-  --prefix "notify-" \
-  --suffix ".json" \
-  --queue "kijani-notify-events-${STAGE}" || echo " -> Mapping exists or handled."
-
-echo "Linking kijani-delivered-${STAGE} to queue..."
-npx wrangler r2 bucket notification create "kijani-delivered-${STAGE}" \
-  --event-type object-create \
-  --prefix "delivered-" \
-  --suffix ".json" \
-  --queue "kijani-delivered-events-${STAGE}" || echo " -> Mapping exists or handled."
+# 4. Bind Notification Rules to Storage Primitives
+link_bucket_to_queue "kijani-receipts-${STAGE}" "receipt-" "kijani-receipts-events-${STAGE}"
+link_bucket_to_queue "kijani-processed-${STAGE}" "processed-" "kijani-processed-events-${STAGE}"
+link_bucket_to_queue "kijani-notify-${STAGE}" "notify-" "kijani-notify-events-${STAGE}"
+link_bucket_to_queue "kijani-delivered-${STAGE}" "delivered-" "kijani-delivered-events-${STAGE}"
 
 echo "==== Cloudflare Infrastructure Provisioning Complete for Stage: ${STAGE} ===="
+
