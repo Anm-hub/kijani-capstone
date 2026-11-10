@@ -51,13 +51,13 @@ export default {
 
   async queue(batch, env) {
     await consume(batch, "kk-receipts", async (key, body) => {
-      // Pull actual payload straight from R2 storage bucket
       const receipt = await readJson(env.RECEIPTS_BUCKET, key);
       
       const currency = receipt.currency || env.DEFAULT_CURRENCY || "KES";
-      if (!receipt.amount || receipt.amount <= 0 || !["KES", "USD"].includes(currency)) {
-        await env.PROCESSED_BUCKET.put(`quarantine-${key}`, JSON.stringify({ ...receipt, rejectionReason: "Invalid currency or values" }));
-        return { action: "QUARANTINE", orderId: receipt.orderId };
+      if (!isValidOrderId(receipt.orderId) || !receipt.amount || receipt.amount <= 0 || !["KES", "USD"].includes(currency)) {
+        const fallbackKey = receipt.orderId ? receipt.orderId : `malformed-${Date.now()}`;
+        await env.PROCESSED_BUCKET.put(`quarantine-receipt-${fallbackKey}.json`, JSON.stringify({ ...receipt, rejectionReason: "Invalid business parameters or missing orderId" }));
+        return { action: "QUARANTINE", orderId: receipt.orderId || null };
       }
 
       const hash = await generateSha256(receipt.orderId);
