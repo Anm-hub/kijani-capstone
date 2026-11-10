@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kk-payments-config
+  namespace: kijani
+data:
+  AWS_REGION: "auto"
+  R2_ENDPOINT: "https://cloudflarestorage.com"
+  R2_BUCKET: "kijani-receipts-staging"
