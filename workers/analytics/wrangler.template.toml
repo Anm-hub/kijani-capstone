@@ -1,0 +1,19 @@
+workers_dev = true
+compatibility_date = "2025-09-01"
+
+[observability]
+enabled = true
+
+[vars]
+STAGE = "__STAGE__"
+
+[[r2_buckets]]
+binding = "DELIVERED_BUCKET"
+bucket_name = "kijani-delivered-__STAGE__"
+
+[[queues.consumers]]
+queue = "kijani-delivered-events-__STAGE__"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "kijani-dead-letters-__STAGE__"

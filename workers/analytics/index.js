@@ -2,14 +2,13 @@ import { createLogger, consume, isAuthenticated } from '../shared/lib.js';
 
 const log = createLogger("kk-analytics");
 
-// Helper function to build metrics by parsing the bucket's custom metadata
 async function generateSummary(env) {
   let count = 0;
   const totals = {};
   let minDeliveredAt = null;
   let maxDeliveredAt = null;
 
-  // Scan objects from the delivered storage segment directly through metadata
+  // Known limit: list() is single-page capped near 500 items
   const listResult = await env.DELIVERED_BUCKET.list({ include: ['customMetadata'] });
   
   for (const obj of listResult.objects) {
@@ -29,63 +28,33 @@ async function generateSummary(env) {
     }
   }
 
-  return {
-    count,
-    totals,
-    timeWindow: {
-      start: minDeliveredAt,
-      end: maxDeliveredAt
-    }
-  };
+  return { count, totals, timeWindow: { start: minDeliveredAt, end: maxDeliveredAt } };
 }
 
 export default {
-  // Public HTTP Management Interface Surface
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {
-      return new Response(JSON.stringify({ status: "UP", service: "kk-analytics" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      });
+      return new Response(JSON.stringify({ status: "UP", service: "kk-analytics" }), { status: 200 });
     }
 
-    // Authenticated Metrics Inspection Access Point
     if (!isAuthenticated(request, env.API_KEY)) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" }
-      });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     }
 
     if (url.pathname === "/summary" && request.method === "GET") {
-      try {
-        const summary = await generateSummary(env);
-        return new Response(JSON.stringify(summary), {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
-      }
+      const summary = await generateSummary(env);
+      return new Response(JSON.stringify(summary), { status: 200 });
     }
 
     if (url.pathname.startsWith("/delivered/") && request.method === "GET") {
-      const receiptId = url.pathname.split("/")[2];
+      const orderId = url.pathname.split("/")[2];
       try {
-        const targetKey = `delivered-${receiptId}.json`;
+        const targetKey = `delivered-${orderId}.json`;
         const obj = await env.DELIVERED_BUCKET.get(targetKey);
-        
-        if (!obj) {
-          return new Response(JSON.stringify({ error: "Record not found" }), { status: 404 });
-        }
-
-        const data = await obj.json();
-        return new Response(JSON.stringify(data), {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        });
+        if (!obj) return new Response(JSON.stringify({ error: "Record not found" }), { status: 404 });
+        return new Response(JSON.stringify(await obj.json()), { status: 200 });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), { status: 500 });
       }
@@ -94,20 +63,15 @@ export default {
     return new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });
   },
 
-  // Asynchronous Decoupled Event Batch Target
   async queue(batch, env) {
-    await consume(batch, "kk-analytics", async (key, body, message) => {
-      // Re-evaluate current aggregation state metrics
+    await consume(batch, "kk-analytics", async (key, body) => {
       const summary = await generateSummary(env);
-      
-      // Output required structured telemetry frame
       log.info("analytics.summary", null, {
         metricsCount: summary.count,
-        currencyAggregates: summary.totals,
-        window: summary.timeWindow
+        currencyAggregates: summary.totals
       });
-
-      return { action: "PROCEED", orderId: body.orderId };
+      return { action: "PROCEED", orderId: null };
     });
   }
 };
+

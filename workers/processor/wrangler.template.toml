@@ -1,0 +1,23 @@
+workers_dev = false
+compatibility_date = "2025-09-01"
+
+[observability]
+enabled = true
+
+[vars]
+STAGE = "__STAGE__"
+
+[[r2_buckets]]
+binding = "PROCESSED_BUCKET"
+bucket_name = "kijani-processed-__STAGE__"
+
+[[r2_buckets]]
+binding = "NOTIFY_BUCKET"
+bucket_name = "kijani-notify-__STAGE__"
+
+[[queues.consumers]]
+queue = "kijani-processed-events-__STAGE__"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "kijani-dead-letters-__STAGE__"

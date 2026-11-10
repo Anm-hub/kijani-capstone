@@ -1,34 +1,29 @@
-import { createLogger, generateSha256, consume } from '../shared/lib.js';
+import { createLogger, generateSha256, consume, readJson } from '../shared/lib.js';
 
 const log = createLogger("kk-processor");
 
 export default {
-  // Purely Asynchronous Queue Consumer (No HTTP Fetch Handler Surface)
   async queue(batch, env) {
-    await consume(batch, "kk-processor", async (key, body, message) => {
-      const orderId = body.orderId;
+    await consume(batch, "kk-processor", async (key) => {
+      const receipt = await readJson(env.PROCESSED_BUCKET, key);
       
-      // Receipt Enrichment Phase
-      const processedAt = new Date().toISOString();
-      const rawDataString = `${body.receiptId}-${orderId}-${body.amount}-${processedAt}`;
+      // Idempotent Checksum over predictable parameters without moving timestamps
+      const rawDataString = `${receipt.receiptId}-${receipt.orderId}-${receipt.amount}-${receipt.currency}`;
       const checksum = await generateSha256(rawDataString);
 
-      const processedPayload = {
-        ...body,
-        processedAt,
+      const enrichedPayload = {
+        ...receipt,
+        processedAt: new Date().toISOString(),
         checksum,
-        processorVersion: "1.0.0"
+        processorVersion: "1.1.0"
       };
 
-      // Write refined payload upstream to the processed state R2 bucket
-      const targetFilename = `processed-${body.receiptId}.json`;
-      await env.PROCESSED_BUCKET.put(targetFilename, JSON.stringify(processedPayload));
-      
-      log.info("receipt.processed", orderId, { key: targetFilename });
+      const outKey = `notify-${receipt.orderId}.json`;
+      await env.NOTIFY_BUCKET.put(outKey, JSON.stringify(enrichedPayload));
+      log.info("receipt.processed", receipt.orderId, { key: outKey });
 
-      // Forward transaction message downstream to the notification producer queue
-      await env.NOTIFY_QUEUE.send(processedPayload);
-      return { action: "PROCEED", orderId };
+      return { action: "PROCEED", orderId: receipt.orderId };
     });
   }
 };
+
