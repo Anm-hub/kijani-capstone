@@ -22,7 +22,6 @@ docker build -t kijani-jenkins-controller ./jenkins
 docker run -d \
   --name kijani-jenkins-automation \
   -p 8090:8080 \
-  -p 50000:50000 \
   -v "${JENKINS_HOME_HOST}:${JENKINS_HOME_HOST}" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e JENKINS_HOME="${JENKINS_HOME_HOST}" \

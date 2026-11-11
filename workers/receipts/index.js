@@ -55,10 +55,12 @@ export default {
       
       const currency = receipt.currency || env.DEFAULT_CURRENCY || "KES";
       if (!isValidOrderId(receipt.orderId) || !receipt.amount || receipt.amount <= 0 || !["KES", "USD"].includes(currency)) {
-        const fallbackKey = receipt.orderId ? receipt.orderId : `malformed-${Date.now()}`;
-        await env.PROCESSED_BUCKET.put(`quarantine-receipt-${fallbackKey}.json`, JSON.stringify({ ...receipt, rejectionReason: "Invalid business parameters or missing orderId" }));
+        // Enforces malicious character sanitation by validating before mapping the R2 storage key
+        const safeOrderSuffix = isValidOrderId(receipt.orderId) ? receipt.orderId : `malformed-${Date.now()}`;
+        await env.PROCESSED_BUCKET.put(`quarantine-receipt-${safeOrderSuffix}.json`, JSON.stringify({ ...receipt, rejectionReason: "Invalid business parameters or missing orderId" }));
         return { action: "QUARANTINE", orderId: receipt.orderId || null };
       }
+
 
       const hash = await generateSha256(receipt.orderId);
       const receiptId = `RCP-${hash.substring(0, 12)}`;

@@ -5,6 +5,6 @@ metadata:
   namespace: kijani
 data:
   AWS_REGION: "auto"
-  R2_ENDPOINT: "https://cloudflarestorage.com"
+  R2_ENDPOINT: "14513c6f6de833183749c28ba5bd80d8"
   R2_BUCKET: "kijani-receipts-staging"
 
