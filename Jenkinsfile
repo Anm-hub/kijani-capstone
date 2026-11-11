@@ -1,9 +1,8 @@
 pipeline {
     agent {
         docker {
-            // Pin the build node image precisely to match your local environment version
+            // Pinned runtime build node image
             image 'node:22.22.1-bookworm'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
         }
     }
 
@@ -22,6 +21,7 @@ pipeline {
         HOME             = "${WORKSPACE}/.jenkins-home"
         NPM_CONFIG_CACHE = "${WORKSPACE}/.npm-cache"
         XDG_CONFIG_HOME  = "${WORKSPACE}/.config"
+        STAGE            = 'staging'
         CI               = 'true'
         WRANGLER_SEND_METRICS = 'false'
         
@@ -41,22 +41,27 @@ pipeline {
 
         stage('Static & Secret Checks') {
             steps {
-                echo "==== Verifying Script Syntax Layouts ===="
+                echo "==== Performing Script Syntax Evaluations ===="
                 sh 'bash -n scripts/*.sh'
 
-                echo "==== Evaluating Codebase for Hardcoded Assignments & Secret Leaks ===="
-                // Target literal assignments (e.g., = or : followed by quotes with 12+ character strings)
-                // Cleanly excludes package-lock and example templates using correct pathspec options
-                sh '! git grep -E "(=|:)\\s*[\"\'][A-Za-z0-9_-]{12,}[\"\']" -- . ":(exclude)package-lock.json" ":(exclude)k8s/secret.example.yaml"'
+                echo "==== Invoking Independent Secret Scanner Script ===="
+                sh './scripts/secret-scan.sh'
 
-                echo "==== Performing Wrangler Dry-Run Syntax Compilations ===="
+                echo "==== Performing Wrangler Dry-Run Compilations ===="
+                // Compiles configuration matrices once per environment lifecycle segment
+                sh './scripts/render-config.sh staging'
                 script {
                     def workers = ['receipts', 'processor', 'notifier', 'analytics']
-                    for (worker in workers) {
-                        sh "./scripts/render-config.sh staging"
-                        sh "cd workers/${worker} && npx wrangler deploy --dry-run --config wrangler.generated.toml"
-                        sh "./scripts/render-config.sh production"
-                        sh "cd workers/${worker} && npx wrangler deploy --dry-run --config wrangler.generated.toml"
+                    for (w in workers) {
+                        sh "cd workers/${w} && npx wrangler deploy --dry-run --config wrangler.generated.toml"
+                    }
+                }
+                
+                sh './scripts/render-config.sh production'
+                script {
+                    def workers = ['receipts', 'processor', 'notifier', 'analytics']
+                    for (w in workers) {
+                        sh "cd workers/${w} && npx wrangler deploy --dry-run --config wrangler.generated.toml"
                     }
                 }
             }
@@ -64,7 +69,6 @@ pipeline {
 
         stage('Provision Staging Infrastructure') {
             steps {
-                echo "==== Configuring Cloudflare Staging Primitives ===="
                 sh './scripts/provision.sh staging'
             }
         }
@@ -74,8 +78,7 @@ pipeline {
                 API_KEY = "${API_KEY_STAGING}"
             }
             steps {
-                echo "==== Deploying Four-Function Stack to Staging ===="
-                sh 'set +x; ./scripts/deploy.sh staging'
+                sh 'set +x; ./scripts/render-config.sh staging; ./scripts/deploy.sh staging'
             }
         }
 
@@ -84,7 +87,6 @@ pipeline {
                 API_KEY = "${API_KEY_STAGING}"
             }
             steps {
-                echo "==== Running Automated Integration Suite against Staging ===="
                 sh './scripts/smoke-test.sh staging'
             }
         }
@@ -95,22 +97,23 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES') {
                     script {
                         // Capture returned layout parameter map into a script block variable
+                        // Replace 'Anm-hub' with your explicit, case-sensitive Jenkins username
                         def userInput = input(
                             message: "Promote Serverless Pipeline Stack to Production?",
                             ok: "Approve Production Release Promotion",
-                            submitter: "admin,Anm-hub", // Change to match your exact user profile credentials name
-                            parameters: [text(name: 'APPROVAL_REASON', description: 'Justification reason text is mandatory.')]
+                            submitter: "Anm-hub",
+                            submitterParameter: 'APPROVER',
+                            parameters: [text(name: 'APPROVAL_REASON', description: 'Release justification reason is non-negotiable.')]
                         )
                         
-                        // Defensively extract data out from input variables map layout
-                        env.STAGE_APPROVER = userInput.toString().contains("APPROVER=") ? "Handled" : "AuthorizedUser"
-                        env.STAGE_REASON = userInput.toString()
+                        String rawReason = userInput['APPROVAL_REASON']
+                        String rawApprover = userInput['APPROVER']
                         
-                        if (env.STAGE_REASON == null || env.STAGE_REASON.trim() == "") {
+                        if (rawReason == null || rawReason.trim() == "") {
                             error("Pipeline Promotion Aborted: Release justification reason cannot be left blank.")
                         }
                         
-                        def logContent = "Approver: ${env.STAGE_APPROVER}\nReason: ${env.STAGE_REASON}\nTimestamp: ${new Date().toString()}\n"
+                        def logContent = "Approver: ${rawApprover}\nReason: ${rawReason.trim()}\nTimestamp: ${new Date().toString()}\n"
                         writeFile file: 'approval.txt', text: logContent
                         archiveArtifacts artifacts: 'approval.txt'
                     }
@@ -120,7 +123,6 @@ pipeline {
 
         stage('Provision Production Infrastructure') {
             steps {
-                echo "==== Configuring Cloudflare Production Primitives ===="
                 sh './scripts/provision.sh production'
             }
         }
@@ -130,8 +132,7 @@ pipeline {
                 API_KEY = "${API_KEY_PRODUCTION}"
             }
             steps {
-                echo "==== Deploying Stable Stack Layers to Live Edge ==="
-                sh 'set +x; ./scripts/deploy.sh production'
+                sh 'set +x; ./scripts/render-config.sh production; ./scripts/deploy.sh production'
             }
         }
 
@@ -140,7 +141,6 @@ pipeline {
                 API_KEY = "${API_KEY_PRODUCTION}"
             }
             steps {
-                echo "==== Running Automated Integration Suite against Production ===="
                 sh './scripts/smoke-test.sh production'
             }
         }

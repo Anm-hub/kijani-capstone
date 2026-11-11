@@ -43,7 +43,7 @@ SUCCESS=0
 
 while [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ]; do
   echo "Polling GET /delivered/${UNIQUE_ORDER} (Attempt ${ATTEMPT}/${MAX_ATTEMPTS})..."
-  STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "x-api-key: ${API_KEY}" "${KK_ANALYTICS_URL}/delivered/${UNIQUE_ORDER}")
+  STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "x-api-key: ${API_KEY}" "${KK_ANALYTICS_URL}/delivered/${UNIQUE_ORDER}" || echo "000")
   
   if [ "${STATUS_CODE}" -eq 200 ]; then
     echo "Telemetry cleared! Target record successfully processed across entire cloud loop."
