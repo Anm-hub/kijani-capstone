@@ -4,7 +4,7 @@ metadata:
   name: kk-payments
   namespace: kijani
   annotations:
-    kubernetes.io/change-cause: "Initial deployment of kk-payments v1.0.0 listening on port 3001 mapped to R2 boundaries"
+    kubernetes.io/change-cause: "Deploy kk-payments 1.2.0-aee4e8e listening on port 3001 mapped to R2 boundaries"
 spec:
   replicas: 2
   strategy:
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: kk-payments-service
-          image: ghcr.io/anm-hub/kk-payments:1.0.0-47142d6
+          image: image: ghcr.io/anm-hub/kk-payments:1.2.0-aee4e8e
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3001
