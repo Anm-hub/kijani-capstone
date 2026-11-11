@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: kk-payments-service
-          image: image: ghcr.io/anm-hub/kk-payments:1.2.0-aee4e8e
+          image: ghcr.io/anm-hub/kk-payments:1.2.0-aee4e8e
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3001
