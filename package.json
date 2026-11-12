@@ -1,15 +1,12 @@
 {
   "name": "kijani-capstone",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "KijaniKiosk end-to-end serverless receipt chain on Cloudflare Workers, R2, and Queues",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "bash -n scripts/*.sh",
+    "secret-scan": "./scripts/secret-scan.sh",
+    "test": "bash -n scripts/*.sh && ./scripts/secret-scan.sh"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "private": true,
   "devDependencies": {
     "wrangler": "^4.158.0"
   }
