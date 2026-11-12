@@ -1,7 +1,6 @@
 pipeline {
     agent {
         docker {
-            // Pinned runtime build node image
             image 'node:22.22.1-bookworm'
         }
     }
@@ -21,7 +20,6 @@ pipeline {
         HOME             = "${WORKSPACE}/.jenkins-home"
         NPM_CONFIG_CACHE = "${WORKSPACE}/.npm-cache"
         XDG_CONFIG_HOME  = "${WORKSPACE}/.config"
-        STAGE            = 'staging'
         CI               = 'true'
         WRANGLER_SEND_METRICS = 'false'
         
@@ -97,7 +95,6 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES') {
                     script {
                         // Capture returned layout parameter map into a script block variable
-                        // Replace 'Anm-hub' with your explicit, case-sensitive Jenkins username
                         def userInput = input(
                             message: "Promote Serverless Pipeline Stack to Production?",
                             ok: "Approve Production Release Promotion",
