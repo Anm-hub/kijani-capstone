@@ -64,14 +64,14 @@ export default {
   },
 
   async queue(batch, env) {
-    await consume(batch, "kk-analytics", async (key, body) => {
+    await consume(batch, "kk-analytics", async (key) => {
+      const orderId = key.replace(/^delivered-/, "").replace(/\.json$/, "");
       const summary = await generateSummary(env);
-      log.info("analytics.summary", null, {
+      log.info("analytics.summary", orderId, {
         metricsCount: summary.count,
         currencyAggregates: summary.totals
       });
-      return { action: "PROCEED", orderId: null };
+      return { action: "PROCEED", orderId };
     });
   }
 };
-
