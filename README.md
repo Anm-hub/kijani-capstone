@@ -74,13 +74,13 @@ The `kk-payments` microservice lives in the companion repository [Anm-hub/kijani
    minikube image load ghcr.io/anm-hub/kk-payments:1.2.0-aee4e8e
    cd ../kijani-capstone
    ```
-2. **Update your Cloudflare Account ID:** Edit `k8s/configmap.yaml` and replace the account ID in `R2_ENDPOINT` (`https://<your-account-id>.r2.cloudflarestorage.com`) with your own Cloudflare Account ID (`npx wrangler whoami`).
+2. **Update your Cloudflare Account ID:** Edit `k8s/kk-payments-configmap.yaml` and replace the account ID in `R2_ENDPOINT` (`https://<your-account-id>.r2.cloudflarestorage.com`) with your own Cloudflare Account ID (`npx wrangler whoami`).
 3. **Create a bucket-scoped R2 token & Kubernetes Secret:**
    * In the Cloudflare dashboard (**R2 → Manage R2 API Tokens → Create Account API Token**), create a token with **Object Read & Write** permissions scoped **exclusively to `kijani-receipts-staging`**.
    * Apply the manifests and inject the credentials imperatively using `read -rs` so nothing lands in shell history or Git:
    ```bash
-   kubectl apply -f k8s/namespace.yaml
-   kubectl apply -f k8s/configmap.yaml
+   kubectl apply -f k8s/kijani-namespace.yaml
+   kubectl apply -f k8s/kk-payments-configmap.yaml
 
    (
      read -rs -p "Paste R2 Access Key ID: " R2_KEY; echo ""
@@ -92,8 +92,8 @@ The `kk-payments` microservice lives in the companion repository [Anm-hub/kijani
        --dry-run=client -o yaml | kubectl apply -f -
    )
 
-   kubectl apply -f k8s/deployment.yaml
-   kubectl apply -f k8s/service.yaml
+   kubectl apply -f k8s/kk-payments-deployment.yaml
+   kubectl apply -f k8s/kk-payments-service.yaml
    kubectl rollout status deployment/kk-payments -n kijani
    ```
 4. **Expose the service locally via `port-forward`:**
@@ -151,8 +151,9 @@ Run one command per acceptance criterion:
 
 ## 7. Known Limitations
 * **Cloudflare Wrangler Instead of Serverless Framework:** Rather than using the `serverless` CLI (`serverless.yml`) with AWS-style wrappers, this project uses native Cloudflare Wrangler templates (`wrangler.template.toml`) compiled per environment via `scripts/render-config.sh`. This avoids paid AWS dependencies and stays 100% compatible with Cloudflare's zero-card free tier for Workers, R2, and Queues.
-* **Registry Pull Not Used:** `k8s/deployment.yaml` sets `imagePullPolicy: IfNotPresent` with the `kk-payments` image built locally and loaded directly into Minikube (`minikube image load`). In a multi-node production cluster, images would be pushed to GitHub Container Registry (`ghcr.io`) and pulled via an `imagePullSecret`.
+* **Registry Pull Not Used:** `k8s/kk-payments-deployment.yaml` sets `imagePullPolicy: IfNotPresent` with the `kk-payments` image built locally and loaded directly into Minikube (`minikube image load`). In a multi-node production cluster, images would be pushed to GitHub Container Registry (`ghcr.io`) and pulled via an `imagePullSecret`.
 * **Single-Page Analytics Listing:** `kk-analytics` aggregates revenue and receipt counts using a single `DELIVERED_BUCKET.list()` call, which returns at most 1,000 objects per page. Supporting high-volume production stores requires paginating with `list.cursor` in a loop until `list.truncated` is `false`.
-* **Data Residency & Config Restarts:** Free-tier R2 buckets use automatic regional placement (`AWS_REGION: "auto"`) rather than strict geographic jurisdiction pinning. Additionally, because Kubernetes injects `R2_BUCKET` via `envFrom` at container startup, switching `kk-payments` between `staging` and `production` requires updating `k8s/configmap.yaml` and running `kubectl rollout restart deployment/kk-payments -n kijani`.
+* **Data Residency & Config Restarts:** Free-tier R2 buckets use automatic regional placement (`AWS_REGION: "auto"`) rather than strict geographic jurisdiction pinning. Additionally, because Kubernetes injects `R2_BUCKET` via `envFrom` at container startup, switching `kk-payments` between `staging` and `production` requires updating `k8s/kk-payments-configmap.yaml` and running `kubectl rollout restart deployment/kk-payments -n kijani`.
 * **SCM Poll Trigger Pauses at Approval:** Because `Jenkinsfile` polls `*/main` every two minutes (`pollSCM('H/2 * * * *')`), any commit or documentation PR merged into `main` automatically triggers a pipeline run that deploys to staging and sits paused at the `Production Approval Gate` (up to the 30-minute timeout) until a human manually approves or aborts it.
 
+* **Deliberate R2 Bucket Naming:** Provisioned R2 buckets use `kijani-<purpose>-<stage>` (`kijani-receipts-staging`, `kijani-processed-staging`, `kijani-notify-staging`, `kijani-delivered-staging`) rather than repeating a service prefix in every bucket name, avoiding unnecessary disruption to live event notifications.
