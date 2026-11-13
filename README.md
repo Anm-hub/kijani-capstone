@@ -62,11 +62,11 @@ export API_KEY=$(openssl rand -hex 24)
 ```
 
 ### B. Kubernetes `kk-payments` Seam (Minikube)
-The `kk-payments` microservice lives in the companion repository [Anm-hub/kijanikiosk-payments](https://github.com). **Note:** The container image is built locally and loaded directly into Minikube (`imagePullPolicy: IfNotPresent`); it is not pushed to GHCR.
+The `kk-payments` microservice lives in the companion repository [Anm-hub/kijanikiosk-payments](https://github.com/Anm-hub/kijanikiosk-payments). **Note:** The container image is built locally and loaded directly into Minikube (`imagePullPolicy: IfNotPresent`); it is not pushed to GHCR.
 
 1. **Build and load the container image from commit `aee4e8e`:**
    ```bash
-   git clone https://github.com.git
+   git clone https://github.com/Anm-hub/kijanikiosk-payments.git
    cd kijanikiosk-payments
    git checkout aee4e8e
    docker build --no-cache -f Dockerfile.production -t ghcr.io/anm-hub/kk-payments:1.2.0-aee4e8e .
@@ -114,7 +114,7 @@ The declarative CI/CD pipeline is defined in `Jenkinsfile` and runs on a contain
    * `cloudflare-account-id` (your Cloudflare Account ID)
    * `kk-api-key-staging` (48-hex API key for staging)
    * `kk-api-key-production` (48-hex API key for production)
-2. **Create Pipeline Job:** Create a **Pipeline** job configured with **Pipeline script from SCM** (`Git`), pointing to `https://github.com` with **Branch Specifier** set to `*/main` and **Script Path** set to `Jenkinsfile`.
+2. **Create Pipeline Job:** Create a **Pipeline** job configured with **Pipeline script from SCM** (`Git`), pointing to `https://github.com/Anm-hub/kijani-capstone` with **Branch Specifier** set to `*/main` and **Script Path** set to `Jenkinsfile`.
 3. **Trigger & Approval Warning:** `Jenkinsfile` includes a `pollSCM('H/2 * * * *')` trigger—**every merge to `main` automatically starts a new build** that runs static checks, deploys to staging, runs smoke tests, and **pauses at the `Production Approval Gate`**. An authorized submitter (`Anm-hub`) must supply a non-empty `APPROVAL_REASON` to archive `approval.txt` and promote to `production`.
 
 ## 6. How to Verify It Works
@@ -150,7 +150,6 @@ Run one command per acceptance criterion:
   ```
 
 ## 7. Known Limitations
-* **Cloudflare Wrangler Instead of Serverless Framework:** Rather than using the `serverless` CLI (`serverless.yml`) with AWS-style wrappers, this project uses native Cloudflare Wrangler templates (`wrangler.template.toml`) compiled per environment via `scripts/render-config.sh`. This avoids paid AWS dependencies and stays 100% compatible with Cloudflare's zero-card free tier for Workers, R2, and Queues.
 * **Registry Pull Not Used:** `k8s/kk-payments-deployment.yaml` sets `imagePullPolicy: IfNotPresent` with the `kk-payments` image built locally and loaded directly into Minikube (`minikube image load`). In a multi-node production cluster, images would be pushed to GitHub Container Registry (`ghcr.io`) and pulled via an `imagePullSecret`.
 * **Single-Page Analytics Listing:** `kk-analytics` aggregates revenue and receipt counts using a single `DELIVERED_BUCKET.list()` call, which returns at most 1,000 objects per page. Supporting high-volume production stores requires paginating with `list.cursor` in a loop until `list.truncated` is `false`.
 * **Data Residency & Config Restarts:** Free-tier R2 buckets use automatic regional placement (`AWS_REGION: "auto"`) rather than strict geographic jurisdiction pinning. Additionally, because Kubernetes injects `R2_BUCKET` via `envFrom` at container startup, switching `kk-payments` between `staging` and `production` requires updating `k8s/kk-payments-configmap.yaml` and running `kubectl rollout restart deployment/kk-payments -n kijani`.
